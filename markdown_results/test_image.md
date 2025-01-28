@@ -1,16 +1,5 @@
 
 # Description:
-The image shows a woman in a wedding dress, with a blue background. The purpose of the image is to showcase the beauty and elegance of the woman and her wedding attire.
+This image is a photograph or digital illustration of a woman showcasing a stunning strapless wedding dress. The strapless, lace and decorated "mermaid" dress features a sweetheart neckline and a breathtakingly long, skirt with multiple layers of ruffled chiffon at the bottom, which creates a diffused shadow effect while flying away behind the visible portion, creating an elegant yet laid-back bridal look. The dress is rendered in a soft white hue.
 
-* A woman in a wedding dress:
-	+ The woman is wearing a strapless, sweetheart-neckline gown.
-	+ The dress is made of white lace and has a mermaid silhouette.
-	+ The skirt of the dress is long and flowing, with a train in the back.
-* The woman has long dark hair and is wearing large earrings:
-	+ Her hair is styled in loose waves that cascade down her back.
-	+ Her earrings are oversized and feature a floral design.
-* The background is a blue sky:
-	+ The sky is a bright, cloudless blue.
-	+ The sun is not visible, but it appears to be a bright and sunny day.
-
-Overall, the image presents a romantic and dreamy scene, with the woman's beautiful wedding dress and the serene blue sky creating a sense of tranquility and joy.
+The woman, with dark hair and red lips, wears these earrings in a pear jumbo silhouette with a teardrop diamond design covered in white rays. She is in profile, looking to her left with a loose updo and flowing hair blowing in the wind. Her position is likely manipulated, including likely raising the brushing angle with upward body weight. The image is set against a serene gradient background that transitions from light blue to white in the center, creating a peaceful and ethereal atmosphere.

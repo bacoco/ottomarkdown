@@ -2,8 +2,5 @@
 
 This is a test PDF content
 
-Conversation History:
 
-User Question:
 
-Answer:

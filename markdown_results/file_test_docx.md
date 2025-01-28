@@ -1,5 +1,7 @@
 1. test.docx:
 
+
+
 AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation
 
 Qingyun Wu , Gagan Bansal , Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li Jiang, Xiaoyun Zhang, Shaokun Zhang, Jiale Liu, Ahmed Awadallah, Ryen W. White, Doug Burger, Chi Wang
@@ -25,8 +27,5 @@ Here is a random table for .docx parsing test purposes:
 | 18 | 19 | 20 | 21 | 22 | 23 |
 | 24 | 25 | 26 | 27 | 28 | 29 |
 
-Conversation History:
 
-User Question:
 
-Answer:

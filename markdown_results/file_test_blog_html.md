@@ -1,6 +1,7 @@
 1. test_blog.html:
 
 
+
 * [Dotnet](https://microsoft.github.io/autogen-for-net/)
 
 * [What's New in AutoGen?](/autogen/blog/2024/03/03/AutoGen-Update)
@@ -109,8 +110,4 @@ Community
 * [Twitter](https://twitter.com/pyautogen)
 Copyright © 2024 AutoGen Authors | [Privacy and Cookies](https://go.microsoft.com/fwlink/?LinkId=521839)
 
-Conversation History:
 
-User Question:
-
-Answer:

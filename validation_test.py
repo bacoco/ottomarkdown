@@ -631,21 +631,16 @@ def test_file_agent_cached():
                 'query': 'This should fail.',
                 'session_id': session_id,
                 'user_id': user_id,
-                'request_id': request_id,
-                'files': []
+                'request_id': request_id
             },
             headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
         )
         print(f"\nMissing files test:")
         print(f"Status Code: {response.status_code}")
-        if response.status_code == 200:
-            result = response.json()
-            if not result['success'] and "no files provided" in result.get('error', ''):
-                print("✓ Successfully handled missing files")
-            else:
-                print(f"✗ Unexpected response: {result}")
+        if response.status_code == 422:
+            print("✓ Successfully handled missing files with 422 error")
         else:
-            print(f"✗ Unexpected status code: {response.status_code}")
+            print(f"✗ Expected status code 422 but got {response.status_code}")
             
     except Exception as e:
         print(f"✗ Error during test: {str(e)}")

@@ -322,8 +322,5 @@ Microsoft Corporation
 | Number of employees | 221,000 (2023) |
 | [Divisions](/wiki/Division_%28business%29 "Division (business)") | * [Microsoft Engineering Groups](/wiki/Microsoft_engineering_groups "Microsoft engineering groups") * [Microsoft Digital Crimes Unit](/wiki/Microsoft_Digital_Crimes_Unit "Microsoft Digital Crimes Unit") * [Microsoft Press](/wiki/Microsoft_Press "Microsoft Press") * [Microsoft Gaming](/wiki/Microsoft_Gaming "Microsoft Gaming") |
 
-Conversation History:
 
-User Question:
 
-Answer:

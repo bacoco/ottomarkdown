@@ -1,5 +1,5 @@
--- Drop existing table if it exists
-drop table if exists messages;
+-- Drop existing table and related objects
+drop table if exists messages cascade;
 
 -- Create messages table
 create table messages (
@@ -31,3 +31,10 @@ create policy "Users can insert messages"
 create policy "Users can update messages"
     on messages for update
     using (true);
+
+-- Grant necessary permissions
+grant all privileges on table messages to authenticated;
+grant all privileges on sequence messages_id_seq to authenticated;
+
+-- Notify Supabase of schema changes
+notify pgrst, 'reload schema';

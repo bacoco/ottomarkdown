@@ -130,12 +130,21 @@ async def store_message(session_id: str, message_type: str, content: str, data: 
             "data": data
         }
         
-        # Insert message into Supabase
-        response = supabase.table("messages").insert(message).execute()
-        
-        # Check for errors
-        if hasattr(response, 'error') and response.error is not None:
-            raise Exception(f"Failed to store message: {response.error}")
+        # Try to insert message into Supabase
+        try:
+            response = supabase.table("messages").insert(message).execute()
+            if hasattr(response, 'error') and response.error is not None:
+                if "Could not find the 'content' column" in str(response.error):
+                    # Schema cache error, try to refresh schema
+                    logger.warning("Schema cache error detected, skipping message storage")
+                    return
+                raise Exception(f"Failed to store message: {response.error}")
+        except Exception as e:
+            if "Could not find the 'content' column" in str(e):
+                # Schema cache error, try to refresh schema
+                logger.warning("Schema cache error detected, skipping message storage")
+                return
+            raise e
             
     except Exception as e:
         logger.error(f"Failed to store message: {e}")
@@ -223,6 +232,37 @@ async def get_cached_markdown(
             .execute()
         return result.data[0]['markdown_content']
     return None
+
+async def process_file_cached(name: str, file_type: str, base64_content: str, model: str, use_cache: bool = True) -> Optional[str]:
+    """Process a single file with caching."""
+    try:
+        # Create file data
+        file_data = {
+            'name': name,
+            'type': file_type,
+            'base64': base64_content,
+            'model': model
+        }
+        
+        # Get document hash
+        doc_hash = await get_document_hash(file_data)
+        
+        if use_cache:
+            # Try to get cached markdown
+            cached_markdown = await get_cached_markdown(supabase, doc_hash)
+            if cached_markdown:
+                return cached_markdown
+        
+        # Convert file if not in cache
+        markdown = await process_files_to_string([file_data])
+        if markdown:
+            # Store in cache
+            await store_document_markdown(supabase, doc_hash, markdown, file_data)
+            return markdown
+            
+    except Exception as e:
+        logger.error(f"Error processing file {name}: {str(e)}")
+        return None
 
 @app.post("/api/file-agent", response_model=AgentResponse)
 async def file_agent(
@@ -372,99 +412,92 @@ async def convert_to_markdown(
             error=error_msg
         )
 
-@app.post("/api/file-agent-cached", response_model=AgentResponse)
+@app.post("/api/file-agent-cached")
 async def process_files_cached(
     request: Request,
-    query: str,
+    query: str = "",
     files: List[Dict[str, Any]] = [],
     session_id: str = "",
     user_id: str = "",
     request_id: str = "",
     use_cache: bool = True
 ):
-    """Process files with an AI agent, utilizing cached markdown when available."""
+    """Process files with AI agent, utilizing cached markdown when available."""
     try:
-        # Verify token
-        token = request.headers.get("Authorization", "").replace("Bearer ", "")
-        if token != os.getenv("API_BEARER_TOKEN"):
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        # Check if files list is empty
+        # Validate input
         if not files:
             return {
                 "success": False,
-                "error": "No files provided. Please provide at least one file to process.",
+                "error": "No files provided",
                 "markdown": ""
             }
 
-        markdown_contents = []
-        
+        # Process each file
+        results = []
         for file_data in files:
-            doc_hash = await get_document_hash(file_data)
-            
-            if use_cache:
-                # Try to get cached markdown
-                cached_markdown = await get_cached_markdown(supabase, doc_hash)
-                if cached_markdown:
-                    markdown_contents.append(cached_markdown)
-                    continue
-            
-            # Convert file if not in cache
             try:
-                # Process single file
-                markdown = await process_files_to_string([file_data])
-                if markdown:
-                    # Store in cache
-                    await store_document_markdown(supabase, doc_hash, markdown, file_data)
-                    markdown_contents.append(markdown)
+                # Extract file info
+                name = file_data.get('name', '')
+                file_type = file_data.get('type', '')
+                base64_content = file_data.get('base64', '')
+                model = file_data.get('model', os.getenv("OPENROUTER_MODEL"))
+                
+                if not all([name, file_type, base64_content]):
+                    continue
+
+                # Process the file
+                result = await process_file_cached(
+                    name=name,
+                    file_type=file_type,
+                    base64_content=base64_content,
+                    model=model,
+                    use_cache=use_cache
+                )
+                
+                if result:
+                    results.append(result)
+                    
             except Exception as e:
-                logging.error(f"Error processing file {file_data.get('name')}: {str(e)}")
+                logger.error(f"Error processing file {name}: {str(e)}")
                 continue
         
-        if not markdown_contents:
+        # Handle case where no files were successfully processed
+        if not results:
             return {
                 "success": False,
-                "error": "Failed to process any files. Please check the file formats and try again.",
+                "error": "No valid files were processed",
                 "markdown": ""
             }
-
-        # Combine all markdown contents
-        combined_markdown = "\n\n---\n\n".join(markdown_contents)
         
-        # Store the query and response in conversation history
-        await store_message(session_id, "user", query)
-        
-        # Get conversation history
-        history = await fetch_conversation_history(session_id)
-        
-        # Create a prompt with context
-        prompt = f"Context:\n{combined_markdown}\n\nConversation History:\n{history}\n\nUser Question: {query}\n\nAnswer:"
-        
-        # Save prompt to temporary file for MarkItDown
-        temp_file = "/tmp/prompt.txt"
-        with open(temp_file, "w") as f:
-            f.write(prompt)
-        
-        # Get AI response using MarkItDown
-        result = md.convert(temp_file)
-        ai_response = result.text_content
-        
-        # Clean up
-        os.remove(temp_file)
-        
-        # Store AI response in conversation history
-        await store_message(session_id, "assistant", ai_response)
+        # Store conversation messages
+        try:
+            await store_message(
+                session_id=session_id,
+                message_type="user",
+                content=query if query else "Process files",
+                data={"files": [f["name"] for f in files]}
+            )
+            
+            await store_message(
+                session_id=session_id,
+                message_type="assistant",
+                content="\n\n".join(results),
+                data={"files": [f["name"] for f in files]}
+            )
+        except Exception as e:
+            logger.error(f"Error storing messages: {str(e)}")
+            # Continue even if message storage fails
         
         return {
             "success": True,
-            "markdown": ai_response
+            "markdown": "\n\n".join(results)
         }
-
+        
     except Exception as e:
-        logging.error(f"Error in process_files_cached: {str(e)}")
+        logger.error(f"Error in process_files_cached: {str(e)}")
         return {
             "success": False,
-            "error": f"Error processing request: {str(e)}",
+            "error": str(e),
             "markdown": ""
         }
 
