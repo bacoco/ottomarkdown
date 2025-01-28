@@ -36,7 +36,7 @@ OttoMarkdown is an intelligent document processing agent that enhances Ottomator
 
 1. Clone the repository:
 ```bash
-git clone [your-repo-url]
+git clone https://github.com/bacoco/ottomarkdown.git
 cd ottomarkdown
 ```
 
