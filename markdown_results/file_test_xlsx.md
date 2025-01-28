@@ -1,5 +1,3 @@
-File content to use as context:
-
 1. test.xlsx:
 
 ## Sheet1
@@ -37,3 +35,8 @@ File content to use as context:
 | 9 | 10 | 11 | 12 |
 | 13 | 14 | 15 | affc7dad-52dc-4b98-9b5d-51e65d8a8ad0 |
 
+Conversation History:
+
+User Question:
+
+Answer:

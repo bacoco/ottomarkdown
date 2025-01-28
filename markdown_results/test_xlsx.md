@@ -1,8 +1,3 @@
-Context:
-File content to use as context:
-
-1. test.xlsx:
-
 ## Sheet1
 | Alpha | Beta | Gamma | Delta |
 | --- | --- | --- | --- |
@@ -37,10 +32,3 @@ File content to use as context:
 | 5 | 6 | 7 | 8 |
 | 9 | 10 | 11 | 12 |
 | 13 | 14 | 15 | affc7dad-52dc-4b98-9b5d-51e65d8a8ad0 |
-
-Conversation History:
-[{'id': '0a0814eb-8d82-458f-93a4-72a59ea8752c', 'created_at': '2025-01-28T08:36:27.383157+00:00', 'session_id': 'test_1738053387.173425', 'message': {'type': 'user', 'content': 'Summarize the main points of this document'}}]
-
-User Question: Summarize the main points of this document
-
-Answer:

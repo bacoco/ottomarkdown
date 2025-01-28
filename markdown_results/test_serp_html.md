@@ -1,7 +1,4 @@
-Context:
-File content to use as context:
-
-1. test_serp.html:
+# Microsoft wikipedia - Search
 
 Skip to content[#](https://www.bing.com/ck/a?!&&p=f8f2368f437d7f27JmltdHM9MTcxMDQ2MDgwMCZpZ3VpZD0xNWViYmNjMy05YmU3LTY3NTYtMzRhNC1hODgwOWE1ZDY2MTcmaW5zaWQ9NTA0NA&ptn=3&ver=2&hsh=3&fclid=15ebbcc3-9be7-6756-34a4-a8809a5d6617&u=a1Lz9GT1JNPVo5RkQx&ntb=1)Microsoft wikipediaTabMicrosoft wikipedia ![Profile Picture](data:image/png;base64...)RewardsMobile
 
@@ -193,10 +190,3 @@ CopilotYour everyday AI companionAbout 310,000 resultsAny time Open links in new
 * Feedback
 * [Your Privacy Choices](https://www.bing.com/ck/a?!&&p=f9280d124b3869b7JmltdHM9MTcxMDQ2MDgwMCZpZ3VpZD0xNWViYmNjMy05YmU3LTY3NTYtMzRhNC1hODgwOWE1ZDY2MTcmaW5zaWQ9NTA4NA&ptn=3&ver=2&hsh=3&fclid=15ebbcc3-9be7-6756-34a4-a8809a5d6617&psq=Microsoft+wikipedia&u=a1aHR0cHM6Ly9nby5taWNyb3NvZnQuY29tL2Z3bGluay8_bGlua2lkPTIyMTQ4MDI&ntb=1)
 [All](/search?q=Microsoft+wikipedia&FORM=000017&qpvt=Microsoft+wikipedia)[Past 24 hours](/search?q=Microsoft+wikipedia&filters=ex1%3a%22ez1%22&FORM=000017&qpvt=Microsoft+wikipedia)[Past week](/search?q=Microsoft+wikipedia&filters=ex1%3a%22ez2%22&FORM=000017&qpvt=Microsoft+wikipedia)[Past month](/search?q=Microsoft+wikipedia&filters=ex1%3a%22ez3%22&FORM=000017&qpvt=Microsoft+wikipedia)[Past year](/search?q=Microsoft+wikipedia&filters=ex1%3a%22ez5_19432_19797%22&FORM=000017)
-
-Conversation History:
-[{'id': 'acd220d8-36a1-4044-b9c5-55f386c2f008', 'created_at': '2025-01-28T08:36:23.111774+00:00', 'session_id': 'test_1738053382.852255', 'message': {'type': 'user', 'content': 'Summarize the main points of this document'}}]
-
-User Question: Summarize the main points of this document
-
-Answer:

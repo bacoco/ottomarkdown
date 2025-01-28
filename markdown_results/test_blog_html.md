@@ -1,6 +1,4 @@
-File content to use as context:
-
-1. test_blog.html:
+# Does Model and Inference Parameter Matter in LLM Applications? - A Case Study for MATH | AutoGen
 
 
 [Skip to main content](#__docusaurus_skipToContent_fallback)What's new in AutoGen? Read [this blog](/autogen/blog/2024/03/03/AutoGen-Update) for an overview of updates[![AutoGen](/autogen/img/ag.svg)![AutoGen](/autogen/img/ag.svg)**AutoGen**](/autogen/)[Docs](/autogen/docs/Getting-Started)[API](/autogen/docs/reference/agentchat/conversable_agent)[Blog](/autogen/blog)[FAQ](/autogen/docs/FAQ)[Examples](/autogen/docs/Examples)[Notebooks](/autogen/docs/notebooks)[Gallery](/autogen/docs/Gallery)Other Languages
@@ -119,5 +117,3 @@ Community
 * [Discord](https://discord.gg/pAbnFJrkgZ)
 * [Twitter](https://twitter.com/pyautogen)
 Copyright © 2024 AutoGen Authors | [Privacy and Cookies](https://go.microsoft.com/fwlink/?LinkId=521839)
-
-

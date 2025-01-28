@@ -1,6 +1,4 @@
-File content to use as context:
-
-1. test_wikipedia.html:
+# Microsoft - Wikipedia
 
 [Jump to content](#bodyContent)
 
@@ -908,6 +906,4 @@ Hidden categories:
 * [![Powered by MediaWiki](/static/images/footer/poweredby_mediawiki_88x31.png)](https://www.mediawiki.org/)
 
 * Toggle limited content width
-
-
 

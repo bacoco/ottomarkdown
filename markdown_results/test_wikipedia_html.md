@@ -1,7 +1,4 @@
-Context:
-File content to use as context:
-
-1. test_wikipedia.html:
+# Microsoft - Wikipedia
 
 [Jump to content](#bodyContent)
 
@@ -910,9 +907,3 @@ Hidden categories:
 
 * Toggle limited content width
 
-Conversation History:
-[{'id': '815c24de-0b24-4e1a-a6ed-a2b0fd353469', 'created_at': '2025-01-28T08:36:19.629384+00:00', 'session_id': 'test_1738053379.348333', 'message': {'type': 'user', 'content': 'Summarize the main points of this document'}}]
-
-User Question: Summarize the main points of this document
-
-Answer:

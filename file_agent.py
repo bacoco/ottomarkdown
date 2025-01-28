@@ -15,16 +15,33 @@ import hashlib
 from datetime import datetime
 import logging
 
-# Load environment variables
-load_dotenv()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app and OpenAI client
+# Load environment variables
+load_dotenv(override=True)  # Force reload environment variables
+
+# Initialize FastAPI app and OpenRouter client
 app = FastAPI()
 security = HTTPBearer()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    default_headers={
+        "HTTP-Referer": "http://localhost:8001",  # Required for OpenRouter
+        "X-Title": "MarkItDown App",  # Optional, for OpenRouter analytics
+    }
+)
 
 # Initialize MarkItDown globally
-md = MarkItDown(llm_client=openai_client, llm_model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free"))
+md = MarkItDown(
+    llm_client=openai_client,
+    llm_model=os.getenv("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct")
+)
 
 # Supabase setup
 supabase: Client = create_client(
@@ -54,7 +71,7 @@ class AgentResponse(BaseModel):
     error: Optional[str] = ""
 
 class FileRequest(BaseModel):
-    file: Dict[str, Any]
+    file: Dict[str, Any]  # Should include name, base64, type, and optionally model
 
 class MarkdownResponse(BaseModel):
     success: bool
@@ -94,20 +111,36 @@ async def fetch_conversation_history(session_id: str, limit: int = 10) -> List[D
 
 async def store_message(session_id: str, message_type: str, content: str, data: Optional[Dict] = None):
     """Store a message in the Supabase messages table."""
-    message_obj = {
-        "type": message_type,
-        "content": content
-    }
-    if data:
-        message_obj["data"] = data
-
     try:
-        supabase.table("messages").insert({
+        # Truncate content if it's too large (100KB limit)
+        max_content_size = 100000  # 100KB
+        if len(content) > max_content_size:
+            content = content[:max_content_size] + "\n...(truncated)"
+            logger.warning(f"Message content truncated to {max_content_size} characters")
+
+        # Ensure data is a valid JSON object
+        if data is None:
+            data = {}
+
+        # Create message object
+        message = {
             "session_id": session_id,
-            "message": message_obj
-        }).execute()
+            "message_type": message_type,
+            "content": content,
+            "data": data
+        }
+        
+        # Insert message into Supabase
+        response = supabase.table("messages").insert(message).execute()
+        
+        # Check for errors
+        if hasattr(response, 'error') and response.error is not None:
+            raise Exception(f"Failed to store message: {response.error}")
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to store message: {str(e)}")
+        logger.error(f"Failed to store message: {e}")
+        # Don't raise the exception, just log it
+        # This prevents message storage failures from breaking the main functionality
 
 async def process_files_to_string(files: Optional[List[Dict[str, Any]]]) -> str:
     """Convert a list of files with base64 content into a formatted string using MarkItDown."""
@@ -145,9 +178,13 @@ async def process_files_to_string(files: Optional[List[Dict[str, Any]]]) -> str:
 
 async def get_document_hash(file_data: Dict[str, Any]) -> str:
     """Generate a unique hash for a document based on its content"""
-    content = file_data.get('base64', '')
+    content = file_data.get('base64', '') or file_data.get('content', '')
     name = file_data.get('name', '')
-    return hashlib.sha256(f"{content}{name}".encode()).hexdigest()
+    file_type = file_data.get('type', '')
+    
+    # Combine all fields to create a unique hash
+    hash_input = f"{content}{name}{file_type}".encode('utf-8')
+    return hashlib.sha256(hash_input).hexdigest()
 
 async def store_document_markdown(
     supabase_client,
@@ -250,6 +287,8 @@ async def convert_to_markdown(
 ):
     """Convert a single file to markdown format."""
     try:
+        logger.info(f"Processing file: {request.file['name']}")
+        
         # Save base64 content to a temporary file
         decoded_content = base64.b64decode(request.file['base64'])
         temp_file_path = f"/tmp/temp_file_{request.file['name']}"
@@ -257,13 +296,50 @@ async def convert_to_markdown(
         try:
             with open(temp_file_path, "wb") as f:
                 f.write(decoded_content)
+            logger.info(f"Saved content to temporary file: {temp_file_path}")
             
-            # Convert file to markdown using MarkItDown
-            result = md.convert(temp_file_path)
+            # Create a new MarkItDown instance with appropriate model
+            if 'model' in request.file:
+                logger.info(f"Using vision model: {os.getenv('OPENROUTER_VLM_MODEL')}")
+                try:
+                    # Create a new MarkItDown instance with the vision model
+                    temp_md = MarkItDown(
+                        llm_client=openai_client,
+                        llm_model=os.getenv("OPENROUTER_VLM_MODEL")
+                    )
+                    result = temp_md.convert(temp_file_path, use_llm=True)
+                    if not result.text_content:
+                        raise Exception("Vision model returned empty response")
+                    logger.info("Successfully used vision model")
+                except Exception as vision_error:
+                    if "401" in str(vision_error):
+                        logger.error(f"Vision model access unauthorized: {str(vision_error)}")
+                        return MarkdownResponse(
+                            success=False,
+                            error=f"API key does not have access to vision model {os.getenv('OPENROUTER_VLM_MODEL')}"
+                        )
+                    logger.error(f"Vision model error: {str(vision_error)}")
+                    return MarkdownResponse(
+                        success=False,
+                        error=f"Error using vision model: {str(vision_error)}"
+                    )
+            else:
+                # Use default model for non-image files
+                temp_md = MarkItDown(
+                    llm_client=openai_client,
+                    llm_model=os.getenv("OPENROUTER_MODEL")
+                )
+                result = temp_md.convert(temp_file_path, use_llm=True)
+            
             markdown_content = result.text_content
+            if not markdown_content:
+                raise Exception("No markdown content generated")
+            
+            logger.info(f"Successfully converted file. Output length: {len(markdown_content)}")
             
             # Clean up temporary file
             os.remove(temp_file_path)
+            logger.info("Cleaned up temporary file")
             
             return MarkdownResponse(
                 success=True,
@@ -271,51 +347,55 @@ async def convert_to_markdown(
             )
             
         except Exception as e:
+            logger.error(f"Error converting file: {str(e)}")
             # Fallback to direct text conversion if markdown conversion fails
             try:
                 text_content = decoded_content.decode('utf-8')
+                logger.info("Fallback: Using direct text conversion")
                 return MarkdownResponse(
                     success=True,
                     markdown=text_content
                 )
             except:
+                error_msg = f"Failed to process file {request.file['name']}: {str(e)}"
+                logger.error(error_msg)
                 return MarkdownResponse(
                     success=False,
-                    error=f"Failed to process file {request.file['name']}: {str(e)}"
+                    error=error_msg
                 )
         
     except Exception as e:
+        error_msg = f"Error processing request: {str(e)}"
+        logger.error(error_msg)
         return MarkdownResponse(
             success=False,
-            error=f"Error processing request: {str(e)}"
+            error=error_msg
         )
 
 @app.post("/api/file-agent-cached", response_model=AgentResponse)
 async def process_files_cached(
     request: Request,
     query: str,
-    files: List[Dict[str, Any]],
-    session_id: str,
-    user_id: str,
-    request_id: str,
+    files: List[Dict[str, Any]] = [],
+    session_id: str = "",
+    user_id: str = "",
+    request_id: str = "",
     use_cache: bool = True
 ):
-    """
-    Process files with AI agent, using cached markdown when available
-    
-    Parameters:
-    - query: User's question about the documents
-    - files: List of file data (name, type, base64)
-    - session_id: Session identifier for conversation context
-    - user_id: User identifier
-    - request_id: Request identifier
-    - use_cache: Whether to use cached markdown (default: True)
-    """
+    """Process files with an AI agent, utilizing cached markdown when available."""
     try:
         # Verify token
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
         if token != os.getenv("API_BEARER_TOKEN"):
             raise HTTPException(status_code=401, detail="Invalid token")
+
+        # Check if files list is empty
+        if not files:
+            return {
+                "success": False,
+                "error": "No files provided. Please provide at least one file to process.",
+                "markdown": ""
+            }
 
         markdown_contents = []
         
@@ -342,12 +422,12 @@ async def process_files_cached(
                 continue
         
         if not markdown_contents:
-            return AgentResponse(
-                success=False,
-                markdown="",
-                error="Failed to process any files"
-            )
-        
+            return {
+                "success": False,
+                "error": "Failed to process any files. Please check the file formats and try again.",
+                "markdown": ""
+            }
+
         # Combine all markdown contents
         combined_markdown = "\n\n---\n\n".join(markdown_contents)
         
@@ -375,18 +455,18 @@ async def process_files_cached(
         # Store AI response in conversation history
         await store_message(session_id, "assistant", ai_response)
         
-        return AgentResponse(
-            success=True,
-            markdown=ai_response
-        )
-        
+        return {
+            "success": True,
+            "markdown": ai_response
+        }
+
     except Exception as e:
         logging.error(f"Error in process_files_cached: {str(e)}")
-        return AgentResponse(
-            success=False,
-            markdown="",
-            error=f"Error processing request: {str(e)}"
-        )
+        return {
+            "success": False,
+            "error": f"Error processing request: {str(e)}",
+            "markdown": ""
+        }
 
 if __name__ == "__main__":
     import uvicorn
