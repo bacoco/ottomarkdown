@@ -1,6 +1,6 @@
 # File Processing Agent for Live Agent Studio
 
-Author: [Loic Baconnier] (https://deeplearning.fr/) and [Cole Medin](https://www.youtube.com/@ColeMedin)
+Author: [Loic Baconnier](https://deeplearning.fr/) and [Cole Medin](https://www.youtube.com/@ColeMedin)
 
 This is a specialized Python FastAPI agent that demonstrates how to handle file uploads in the Live Agent Studio. It shows how to process, store, and leverage file content in conversations with AI models.
 
