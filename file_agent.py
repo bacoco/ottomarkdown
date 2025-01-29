@@ -16,11 +16,16 @@ from datetime import datetime
 import logging
 import imghdr
 import io
+import re
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('markdown_results/file_agent.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -153,6 +158,52 @@ async def store_message(session_id: str, message_type: str, content: str, data: 
         # Don't raise the exception, just log it
         # This prevents message storage failures from breaking the main functionality
 
+async def generate_summary(text: str) -> str:
+    """Generate a summary using the OpenRouter API with Mistral model."""
+    try:
+        model = os.getenv("OPENROUTER_MODEL")
+        if not model:
+            raise ValueError("OPENROUTER_MODEL environment variable not set")
+            
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that provides concise summaries."},
+                {"role": "user", "content": f"Please provide a brief summary of the following content:\n\n{text}"}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        return "Summary generation failed"
+
+async def save_markdown_file(filename: str, content: str, summary: str = None) -> str:
+    """Save markdown content to a file."""
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs('markdown_results', exist_ok=True)
+        
+        # Clean filename and create full path
+        clean_filename = re.sub(r'[^\w\-_\.]', '_', filename)
+        base, ext = os.path.splitext(clean_filename)
+        markdown_path = os.path.join('markdown_results', f"{base}.md")
+        
+        # Combine summary and content
+        full_content = ""
+        if summary:
+            full_content = f"# Summary\n{summary}\n\n# Content\n{content}"
+        else:
+            full_content = content
+            
+        # Save to file
+        with open(markdown_path, 'w', encoding='utf-8') as f:
+            f.write(full_content)
+            
+        return markdown_path
+    except Exception as e:
+        logger.error(f"Error saving markdown file: {str(e)}")
+        return ""
+
 async def process_files_to_string(files: Optional[List[Dict[str, Any]]], query: str = "") -> str:
     """Convert a list of files with base64 content into a formatted string using MarkItDown."""
     if not files:
@@ -164,7 +215,7 @@ async def process_files_to_string(files: Optional[List[Dict[str, Any]]], query: 
         try:
             # Skip system files
             if file['name'].startswith('.'):
-                print(f"Skipping system file: {file['name']}")
+                logger.info(f"Skipping system file: {file['name']}")
                 continue
                 
             # Save base64 content to a temporary file
@@ -200,24 +251,38 @@ async def process_files_to_string(files: Optional[List[Dict[str, Any]]], query: 
                     llm_model=model
                 )
             
-            # Convert file to markdown using MarkItDown with query context if provided
-            if query:
-                result = temp_md.convert(temp_file_path, use_llm=True, prompt_prefix=f"Context: {query}\n\n")
-            else:
-                result = temp_md.convert(temp_file_path, use_llm=True)
-                
+            # Convert file to markdown using MarkItDown
+            result = temp_md.convert(temp_file_path, use_llm=True)
             markdown_content = result.text_content
             
             # Clean up temporary file
             os.remove(temp_file_path)
             
-            file_content += f"{i}. {file['name']}:\n\n{markdown_content}\n\n"
+            # If query is provided, use it with LLM
+            if query:
+                response = openai_client.chat.completions.create(
+                    model=os.getenv("OPENROUTER_MODEL"),
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that processes text based on user queries."},
+                        {"role": "user", "content": f"{query}\n\nText to process:\n{markdown_content}"}
+                    ]
+                )
+                processed_content = response.choices[0].message.content
+                file_content += f"{i}. {file['name']}:\n\n{processed_content}\n\n"
+            else:
+                file_content += f"{i}. {file['name']}:\n\n{markdown_content}\n\n"
+                
+            logger.info(f"Successfully processed {file['name']}")
+            
         except Exception as e:
             logger.error(f"Error processing file {file['name']}: {str(e)}")
             # Fallback to direct text conversion if markdown conversion fails
             try:
-                text_content = decoded_content.decode('utf-8')
-                file_content += f"{i}. {file['name']} (plain text):\n\n{text_content}\n\n"
+                if is_image:
+                    file_content += f"{i}. {file['name']} (image file - processing failed)\n\n"
+                else:
+                    text_content = decoded_content.decode('utf-8')
+                    file_content += f"{i}. {file['name']} (plain text):\n\n{text_content}\n\n"
             except:
                 file_content += f"{i}. {file['name']} (failed to process)\n\n"
     
@@ -308,6 +373,8 @@ async def file_agent(
     authenticated: bool = Depends(verify_token)
 ):
     try:
+        logger.info(f"Received request: {request}")
+        
         # Fetch conversation history from the DB
         conversation_history = await fetch_conversation_history(request.session_id)
         
@@ -346,7 +413,7 @@ async def file_agent(
         await store_message(
             session_id=request.session_id,
             message_type="ai",
-            content=markdown_content,
+            content="",
             data={"request_id": request.request_id}
         )
 

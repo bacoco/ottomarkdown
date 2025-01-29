@@ -1,4 +1,4 @@
-1. test.docx:
+# Original Content
 
 
 
@@ -29,3 +29,6 @@ Here is a random table for .docx parsing test purposes:
 
 
 
+# Summary
+
+ AutoGen is an open-source framework that enables developers to create LLM applications through multi-agent conversations. These agents, customizable and capable of operating in various modes, can interact with each other using combinations of LLMs, human inputs, and tools. The framework is versatile, supporting a range of applications across various complexities and LLM capacities, demonstrated in domains like mathematics, coding, question answering, and more. The goal is to facilitate the development of diverse applications using multi-agent conversations, addressing the need for scalable and adaptable solutions in a growing number of real-world tasks.

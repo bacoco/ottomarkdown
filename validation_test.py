@@ -9,10 +9,36 @@ import io
 import requests
 import mimetypes
 import time
+import re
+import httpx
 
 # Load environment variables from .env file
 print("Loading .env file from:", find_dotenv())
-load_dotenv(override=True)  # Force reload of environment variables
+load_dotenv(find_dotenv())
+
+# Set environment variables
+os.environ["OPENROUTER_API_KEY"] = os.getenv("OPENROUTER_API_KEY")
+os.environ["OPENROUTER_MODEL"] = os.getenv("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct")
+os.environ["OPENROUTER_VLM_MODEL"] = os.getenv("OPENROUTER_VLM_MODEL", "meta-llama/llama-3.2-11b-vision-instruct:free")
+
+# Print loaded environment variables
+print("\nEnvironment variables loaded:")
+print(f"OPENROUTER_API_KEY = {os.getenv('OPENROUTER_API_KEY')}")
+print(f"OPENROUTER_MODEL = {os.getenv('OPENROUTER_MODEL')}")
+print(f"OPENROUTER_VLM_MODEL = {os.getenv('OPENROUTER_VLM_MODEL')}")
+
+# Set up API URL with protocol
+API_URL = "http://" + os.getenv("API_URL", "localhost:8001")
+
+# Get API token
+API_TOKEN = os.getenv("API_BEARER_TOKEN")
+if not API_TOKEN:
+    raise ValueError("API_BEARER_TOKEN not set in environment")
+
+# Common headers
+HEADERS = {
+    "Authorization": f"Bearer {API_TOKEN}"
+}
 
 # Get and clean environment variables
 api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -93,45 +119,45 @@ def test_file_processing():
     """Test file processing capabilities without LLM calls"""
     print("\nStarting file processing test...")
     
-    # Initialize MarkItDown without LLM
-    md = MarkItDown(llm_client=None)
+    # Initialize OpenRouter client with VLM model for images
+    openai_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        default_headers={
+            "HTTP-Referer": "http://localhost:8001",
+            "X-Title": "MarkItDown Test",
+        }
+    )
+    
+    # Initialize MarkItDown with VLM model for images
+    md = MarkItDown(
+        llm_client=openai_client,
+        llm_model=os.getenv("OPENROUTER_VLM_MODEL")
+    )
     
     # Test directory path
     test_dir = Path(__file__).parent / "test_files"
     results_dir = Path(__file__).parent / "markdown_results"
     ensure_dir(results_dir)
     
-    # Process each file in the test directory
     for file_path in test_dir.glob("*"):
-        # Skip .DS_Store and other hidden files
-        if file_path.name.startswith('.'):
-            print(f"Skipping hidden file: {file_path.name}")
-            continue
-            
         try:
             print(f"\nProcessing {file_path.name}...")
-            
-            # Convert file using MarkItDown
             result = md.convert(str(file_path))
             
-            # Validate result
-            if result and hasattr(result, 'text_content') and result.text_content:
+            if result and hasattr(result, 'text_content'):
                 print(f"✓ Successfully processed {file_path.name}")
-                print(f"  Output length: {len(result.text_content)} characters")
-                print(f"  First 100 characters: {result.text_content[:100]}...")
                 
                 # Create markdown file name
-                file_type = file_path.suffix.lower()[1:]  # Remove the dot
+                file_type = file_path.suffix.lower()[1:]
                 base_name = file_path.stem
-                md_file = results_dir / f"{base_name}_{file_type}.md"
+                md_file = results_dir / f"local_convert_{base_name}_{file_type}.md"
                 
-                # Save markdown content
+                # Save markdown content for all files
                 with open(md_file, 'w', encoding='utf-8') as f:
-                    if hasattr(result, 'title') and result.title:
-                        print(f"  Title: {result.title}")
-                        f.write(f"# {result.title}\n\n")
                     f.write(result.text_content)
                 
+                print(f"  Output length: {len(result.text_content)} characters")
                 print(f"  Saved markdown to: {md_file}")
             else:
                 print(f"✗ Failed to process {file_path.name}")
@@ -143,16 +169,10 @@ def test_file_processing():
             print(f"  Error message: {str(e)}")
 
 def test_file_processing_with_llm():
-    """Test processing various file types with LLM integration."""
-    test_files = {
-        'test_docx.docx': 'test_files/test.docx',
-        'test_html.html': 'test_files/test_wikipedia.html',
-        'test_pptx.pptx': 'test_files/test.pptx',
-        'test_pdf.pdf': 'test_files/test.pdf',
-        'test_xlsx.xlsx': 'test_files/test.xlsx'
-    }
+    """Test processing all files with LLM"""
+    print("\nTesting file processing with LLM...")
     
-    # Initialize OpenRouter client with Llama vision model
+    # Initialize OpenRouter clients
     openai_client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -162,41 +182,56 @@ def test_file_processing_with_llm():
         }
     )
 
-    # Initialize MarkItDown with Llama vision model
-    md = MarkItDown(
+    # Initialize MarkItDown with appropriate models
+    md_text = MarkItDown(
+        llm_client=openai_client,
+        llm_model=os.getenv("OPENROUTER_MODEL")
+    )
+    md_vlm = MarkItDown(
         llm_client=openai_client,
         llm_model=os.getenv("OPENROUTER_VLM_MODEL")
     )
     
-    # Create output directory if it doesn't exist
-    os.makedirs('markdown_results', exist_ok=True)
+    test_dir = Path(__file__).parent / "test_files"
     
-    for output_name, input_path in test_files.items():
+    for file_path in test_dir.glob("*"):
+        if file_path.name.startswith('.'):
+            continue
+            
         try:
-            print(f"\nProcessing {input_path} with LLM...")
-            # Convert file to markdown with LLM enabled
-            result = md.convert(input_path, use_llm=True)
+            print(f"\nProcessing {file_path.name}...")
             
-            # Save the markdown content
-            output_path = f'markdown_results/{output_name.rsplit(".", 1)[0]}.md'
-            with open(output_path, 'w') as f:
-                if hasattr(result, 'title') and result.title:
-                    f.write(f"# {result.title}\n\n")
-                f.write(result.text_content)
+            # Use appropriate model and always set use_llm=True
+            if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
+                result = md_vlm.convert(str(file_path), use_llm=True)
+            else:
+                result = md_text.convert(str(file_path), use_llm=True)
+            
+            # Save results
+            if result and hasattr(result, 'text_content'):
+                output_path = f'markdown_results/api_openrouter_{file_path.stem}_{file_path.suffix[1:]}.md'
+                with open(output_path, 'w') as f:
+                    if hasattr(result, 'title') and result.title:
+                        f.write(f"# {result.title}\n\n")
+                    f.write(result.text_content)
                 
-            print(f"Successfully processed {input_path}")
-            print(f"Output saved to: {output_path}")
-            print(f"First 100 characters: {result.text_content[:100]}...")
-            
+                print(f"Successfully processed {file_path.name}")
+                print(f"Output saved to: {output_path}")
+                print(f"First 100 characters: {result.text_content[:100]}...")
         except Exception as e:
-            print(f"Error processing {input_path}: {str(e)}")
-            print(f"Error type: {type(e).__name__}")
+            print(f"Error processing {file_path.name}: {str(e)}")
 
 def test_image_processing_with_llm():
     """Test processing image files with LLM integration for descriptions."""
     print("\nTesting image processing with LLM...")
     
-    # Initialize OpenRouter client with Llama vision model
+    # Get all image files from test_files directory
+    test_dir = Path(__file__).parent / "test_files"
+    image_files = [f for f in test_dir.glob("*") if f.is_file() 
+                   and not f.name.startswith('.') 
+                   and f.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']]
+    
+    # Initialize OpenRouter client with VLM model for images
     openai_client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -206,575 +241,466 @@ def test_image_processing_with_llm():
         }
     )
 
-    # Initialize MarkItDown with Llama vision model
+    # Initialize MarkItDown with VLM model
     md = MarkItDown(
         llm_client=openai_client,
         llm_model=os.getenv("OPENROUTER_VLM_MODEL")
     )
     
-    # Create output directory if it doesn't exist
-    os.makedirs('markdown_results', exist_ok=True)
-    
-    # Test with an image file
-    try:
-        image_path = 'test_files/image.jpg'
-        print(f"Processing image: {image_path}")
-        result = md.convert(image_path, use_llm=True)
-        
-        # Save the markdown content
-        output_path = 'markdown_results/test_image.md'
-        with open(output_path, 'w') as f:
-            f.write(result.text_content)
+    for image_path in image_files:
+        try:
+            print(f"\nProcessing image: {image_path.name}")
+            result = md.convert(str(image_path), use_llm=True)
             
-        print(f"Successfully processed {image_path} with Llama Vision")
-        print(f"Output saved to: {output_path}")
-        print(f"Generated description: {result.text_content[:200]}...")
-        
-    except Exception as e:
-        print(f"Error processing image: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
+            # Use consistent naming pattern matching other test functions
+            output_path = f'markdown_results/api_openrouter_vision_{image_path.stem}_{image_path.suffix[1:]}.md'
+            with open(output_path, 'w') as f:
+                f.write(result.text_content)
+                
+            print(f"Successfully processed {image_path.name}")
+            print(f"Output saved to: {output_path}")
+            print(f"Generated description: {result.text_content[:200]}...")
+            
+        except Exception as e:
+            print(f"Error processing image: {str(e)}")
+            print(f"Error type: {type(e).__name__}")
 
-def test_api_file_agent_cached():
-    print("\nTesting /api/file-agent-cached endpoint...")
+def test_file_agent_openrouter():
+    """Test file agent with OpenRouter LLM using query on markdown output"""
+    print("\nTesting file agent with OpenRouter...")
     
-    # Get list of test files
-    test_files = os.listdir('test_files')
-    print(f"Processing {len(test_files)} files:")
-    for f in test_files:
-        print(f"- {f}")
-    print()
+    # Initialize OpenRouter client
+    openai_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        default_headers={
+            "HTTP-Referer": "http://localhost:8001",
+            "X-Title": "MarkItDown Test",
+        }
+    )
     
-    # Process one file at a time to avoid timeouts
-    batch_size = 1
-    max_retries = 5  # Increased from 3 to 5
-    content_size_limit = 100000  # Reduced from 200KB to 100KB
+    # Initialize MarkItDown with appropriate models
+    md_text = MarkItDown(
+        llm_client=openai_client,
+        llm_model=os.getenv("OPENROUTER_MODEL")
+    )
+    md_vlm = MarkItDown(
+        llm_client=openai_client,
+        llm_model=os.getenv("OPENROUTER_VLM_MODEL")
+    )
     
-    for i in range(0, len(test_files), batch_size):
-        batch = test_files[i:i + batch_size]
-        files_data = []
-        
-        for file_name in batch:
-            file_path = os.path.join('test_files', file_name)
-            if os.path.getsize(file_path) > content_size_limit:
-                print(f"⚠️ {file_name} exceeds size limit ({os.path.getsize(file_path)} bytes). Content will be truncated.")
-            
-            try:
-                with open(file_path, 'rb') as f:
-                    content = f.read(content_size_limit)
-                    base64_content = base64.b64encode(content).decode('utf-8')
-                    print(f"✓ Successfully encoded {file_name}")
-                    files_data.append({
-                        'name': file_name,
-                        'base64': base64_content,
-                        'type': os.path.splitext(file_name)[1][1:]  # Get file extension without dot
-                    })
-            except Exception as e:
-                print(f"✗ Failed to encode {file_name}: {str(e)}")
-                continue
-        
-        if not files_data:
+    test_dir = Path(__file__).parent / "test_files"
+    results_dir = Path(__file__).parent / "markdown_results"
+    ensure_dir(results_dir)
+    
+    for file_path in test_dir.glob("*"):
+        if file_path.name.startswith('.'):
             continue
             
-        # Try the request with retries and exponential backoff
-        success = False
-        for retry in range(max_retries):
-            try:
-                response = requests.post(
-                    'http://localhost:8001/api/file-agent-cached',
-                    params={
-                        'query': '',
-                        'session_id': 'test_session_123',
-                        'user_id': 'test_user_123',
-                        'request_id': 'test_request_123',
-                        'use_cache': 'true'
-                    },
-                    json=files_data,
-                    headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
+        try:
+            print(f"\nProcessing {file_path.name}...")
+            
+            # First get markdown content using appropriate model
+            if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
+                markdown_result = md_vlm.convert(str(file_path), use_llm=True)
+            else:
+                markdown_result = md_text.convert(str(file_path), use_llm=True)
+            
+            if markdown_result and hasattr(markdown_result, 'text_content'):
+                # Now process the markdown with LLM query for summary
+                query = "Give me a concise summary of this content in 3-4 sentences."
+                response = openai_client.chat.completions.create(
+                    model=os.getenv("OPENROUTER_MODEL"),
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that provides clear and concise summaries."},
+                        {"role": "user", "content": f"{markdown_result.text_content}\n\n{query}"}
+                    ]
                 )
                 
-                print(f"\nStatus Code: {response.status_code}")
+                # Save results
+                output_path = results_dir / f"agent_openrouter_summary_{file_path.stem}_{file_path.suffix[1:]}.md"
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
+                        f.write(f"![{file_path.stem}](../test_files/{file_path.name})\n\n")
+                    f.write("# Original Content\n\n")
+                    f.write(markdown_result.text_content)
+                    f.write("\n\n# Summary\n\n")
+                    f.write(response.choices[0].message.content)
                 
-                if response.status_code == 200:
-                    success = True
-                    break
-                else:
-                    print(f"Attempt {retry + 1} failed. Status: {response.status_code}")
-                    if retry < max_retries - 1:
-                        delay = min(30, (2 ** retry) * 5)  # Exponential backoff, max 30 seconds
-                        print(f"Waiting {delay} seconds before retry...")
-                        time.sleep(delay)
-            except Exception as e:
-                print(f"Request failed: {str(e)}")
-                if retry < max_retries - 1:
-                    delay = min(30, (2 ** retry) * 5)  # Exponential backoff, max 30 seconds
-                    print(f"Waiting {delay} seconds before retry...")
-                    time.sleep(delay)
-        
-        if success and 'application/json' in response.headers.get('content-type', ''):
-            result = response.json()
-            print("Success! Response:\n")
-            
-            if 'markdown' in result:
-                print("\nMarkdown content (first 100 chars for each file):")
-                content = result['markdown']
-                current_file = None
-                current_content = []
-                
-                for line in content.split('\n'):
-                    # Skip metadata lines and embedded content
-                    if (line.startswith('[') or line.startswith('{') or 
-                        'data:' in line or '[![' in line or '![' in line):
-                        continue
-                        
-                    if line.startswith('1. ') and ':' in line:
-                        # If we have a previous file, save it
-                        if current_file and current_content:
-                            # Clean up the content
-                            clean_content = []
-                            for c in current_content:
-                                if not (c.startswith('[') or c.startswith('{') or 
-                                      'Context:' in c or 'data:' in c or '[![' in c or '![' in c):
-                                    clean_content.append(c)
-                            
-                            # Only save if we have actual content and it's a real file
-                            if clean_content and current_file in test_files:
-                                name_without_ext = os.path.splitext(current_file)[0]
-                                file_type = os.path.splitext(current_file)[1][1:]  # Remove the dot
-                                output_file = os.path.join('markdown_results', f'file_{name_without_ext}_{file_type}.md')
-                                with open(output_file, 'w') as f:
-                                    f.write('\n'.join(clean_content))
-                                print(f"\nSaved {current_file} content to: {output_file}")
-                        
-                        # Start new file
-                        current_file = line.split(':')[0].split('1. ')[1].strip()
-                        current_content = [line]
-                    else:
-                        if current_content:  # Only append if we have started a file
-                            current_content.append(line)
-                
-                # Save the last file
-                if current_file and current_content:
-                    # Clean up the content
-                    clean_content = []
-                    for c in current_content:
-                        if not (c.startswith('[') or c.startswith('{') or 
-                              'Context:' in c or 'data:' in c or '[![' in c or '![' in c):
-                            clean_content.append(c)
-                    
-                    # Only save if we have actual content and it's a real file
-                    if clean_content and current_file in test_files:
-                        name_without_ext = os.path.splitext(current_file)[0]
-                        file_type = os.path.splitext(current_file)[1][1:]  # Remove the dot
-                        output_file = os.path.join('markdown_results', f'file_{name_without_ext}_{file_type}.md')
-                        with open(output_file, 'w') as f:
-                            f.write('\n'.join(clean_content))
-                        print(f"\nSaved {current_file} content to: {output_file}")
-            else:
-                print(f"Error: {response.text}")
-            
-            # Add a delay between requests to avoid overwhelming the server
-            # Use a longer delay for larger files
-            if i + batch_size < len(test_files):
-                delay = 5 if len(files_data[0]['base64']) > 500000 else 2
-                print(f"\nWaiting {delay} seconds before next request...")
-                time.sleep(delay)
-        
-        # Add a delay between requests to avoid overwhelming the server
-        # if i + batch_size < len(test_files):
-        #     print("\nWaiting 2 seconds before next request...")
-        #     time.sleep(2)
-
-def test_convert_to_markdown():
-    print("\nTesting /api/convert-to-markdown endpoint...")
-    
-    # Test each file individually
-    test_files = os.listdir('test_files')
-    content_size_limit = 500000  # 500KB limit for text files
-    binary_size_limit = 5000000  # 5MB limit for binary files
-    
-    for file_name in test_files:
-        try:
-            # Skip system files
-            if file_name.startswith('.'):
-                print(f"Skipping system file: {file_name}")
-                continue
-                
-            print(f"\nProcessing {file_name}...")
-            file_path = os.path.join('test_files', file_name)
-            
-            # Determine file type
-            file_ext = os.path.splitext(file_name)[1][1:].lower()
-            is_binary = file_ext in ['pptx', 'xlsx', 'docx', 'pdf']
-            size_limit = binary_size_limit if is_binary else content_size_limit
-            
-            # Check file size
-            if os.path.getsize(file_path) > size_limit:
-                print(f"⚠️ File exceeds size limit ({os.path.getsize(file_path)} bytes). Content will be truncated.")
-            
-            # Read and encode file
-            with open(file_path, 'rb') as f:
-                content = f.read(size_limit)
-                base64_content = base64.b64encode(content).decode('utf-8')
-                print(f"✓ Successfully encoded file")
-                
-                # Prepare request
-                file_data = {
-                    'name': file_name,
-                    'base64': base64_content,
-                    'type': file_ext
-                }
-                
-                # Add VLM model for images
-                if file_ext.lower() in ['jpg', 'jpeg', 'png', 'gif']:
-                    file_data['model'] = 'meta-llama/llama-3.2-11b-vision-instruct:free'
-                    print(f"Note: Using vision model {file_data['model']} - requires appropriate API access")
-                
-                # Make request with retries
-                max_retries = 5
-                success = False
-                
-                for retry in range(max_retries):
-                    try:
-                        response = requests.post(
-                            'http://localhost:8001/api/convert-to-markdown',
-                            json={'file': file_data},
-                            headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
-                        )
-                        
-                        print(f"Status Code: {response.status_code}")
-                        
-                        if response.status_code == 200:
-                            success = True
-                            break
-                        else:
-                            print(f"Attempt {retry + 1} failed. Status: {response.status_code}")
-                            if retry < max_retries - 1:
-                                delay = min(30, (2 ** retry) * 5)  # Exponential backoff, max 30 seconds
-                                print(f"Waiting {delay} seconds before retry...")
-                                time.sleep(delay)
-                    except Exception as e:
-                        print(f"Request failed: {str(e)}")
-                        if retry < max_retries - 1:
-                            delay = min(30, (2 ** retry) * 5)
-                            print(f"Waiting {delay} seconds before retry...")
-                            time.sleep(delay)
-                
-                if success and 'application/json' in response.headers.get('content-type', ''):
-                    result = response.json()
-                    if result.get('success'):
-                        # Save markdown to file
-                        name_without_ext = os.path.splitext(file_name)[0]
-                        file_type = os.path.splitext(file_name)[1][1:]
-                        output_file = os.path.join('markdown_results', f'api_convert_{name_without_ext}_{file_type}.md')
-                        
-                        with open(output_file, 'w') as f:
-                            f.write(result['markdown'])
-                        print(f"✓ Successfully converted and saved to: {output_file}")
-                        
-                        # Show preview
-                        preview = result['markdown'][:100] + '...' if len(result['markdown']) > 100 else result['markdown']
-                        print(f"\nPreview:\n{preview}")
-                    else:
-                        print(f"✗ Conversion failed: {result.get('error', 'Unknown error')}")
-                else:
-                    print("✗ Request failed or invalid response")
-                    
-        except Exception as e:
-            print(f"✗ Failed to process {file_name}: {str(e)}")
-            continue
-        
-        # Add delay between files
-        if file_name != test_files[-1]:  # Don't wait after the last file
-            time.sleep(5)  # 5 second delay between files
-
-def test_file_agent():
-    """Test the /api/file-agent endpoint with query context."""
-    print("\nTesting /api/file-agent endpoint with query...")
-    
-    # Test each file individually
-    test_files = os.listdir('test_files')
-    content_size_limit = 500000  # 500KB limit for text files
-    binary_size_limit = 5000000  # 5MB limit for binary files
-    
-    # Test query to provide context
-    test_query = "Please provide a summary of these files focusing on the main points and key information."
-    print(f"\nUsing query: {test_query}")
-    
-    files_data = []
-    for file_name in test_files:
-        # Skip system files
-        if file_name.startswith('.'):
-            print(f"Skipping system file: {file_name}")
-            continue
-            
-        print(f"\nProcessing {file_name}...")
-        file_path = os.path.join('test_files', file_name)
-        
-        # Determine file type
-        file_ext = os.path.splitext(file_name)[1][1:].lower()
-        is_binary = file_ext in ['pptx', 'xlsx', 'docx', 'pdf']
-        size_limit = binary_size_limit if is_binary else content_size_limit
-        
-        try:
-            # Read and encode file
-            with open(file_path, 'rb') as f:
-                content = f.read(size_limit)
-                base64_content = base64.b64encode(content).decode('utf-8')
-                print(f"✓ Successfully encoded {file_name}")
-                
-                # Add file to list
-                files_data.append({
-                    'name': file_name,
-                    'type': file_ext,
-                    'base64': base64_content
-                })
+                print(f"✓ Successfully processed {file_path.name}")
+                print(f"  Saved to: {output_path}")
                 
         except Exception as e:
-            print(f"✗ Failed to process {file_name}: {str(e)}")
-            continue
+            print(f"✗ Error processing {file_path.name}")
+            print(f"  Error type: {type(e).__name__}")
+            print(f"  Error message: {str(e)}")
+
+# def test_api_file_agent_cached():
+#     print("\nTesting /api/file-agent-cached endpoint...")
     
-    if files_data:
-        try:
-            print(f"\nSending request with {len(files_data)} files...")
+#     # Get list of test files
+#     test_files = os.listdir('test_files')
+#     print(f"Processing {len(test_files)} files:")
+#     for f in test_files:
+#         print(f"- {f}")
+#     print()
+    
+#     # Process one file at a time to avoid timeouts
+#     batch_size = 1
+#     max_retries = 5
+#     content_size_limit = 100000
+    
+#     for i in range(0, len(test_files), batch_size):
+#         batch = test_files[i:i + batch_size]
+#         files_data = []
+        
+#         for file_name in batch:
+#             file_path = os.path.join('test_files', file_name)
+#             if os.path.getsize(file_path) > content_size_limit:
+#                 print(f"⚠️ {file_name} exceeds size limit ({os.path.getsize(file_path)} bytes). Content will be truncated.")
             
-            # Prepare request data
-            request_data = {
-                'query': test_query,
-                'files': files_data,
-                'session_id': 'test_session_123',
-                'user_id': 'test_user_123',
-                'request_id': 'test_request_123'
-            }
+#             try:
+#                 with open(file_path, 'rb') as f:
+#                     content = f.read(content_size_limit)
+#                     base64_content = base64.b64encode(content).decode('utf-8')
+#                     print(f"✓ Successfully encoded {file_name}")
+#                     files_data.append({
+#                         'name': file_name,
+#                         'base64': base64_content,
+#                         'type': os.path.splitext(file_name)[1][1:]
+#                     })
+#             except Exception as e:
+#                 print(f"✗ Failed to encode {file_name}: {str(e)}")
+#                 continue
+        
+#         if not files_data:
+#             continue
             
-            # Send request
-            response = requests.post(
-                'http://localhost:8001/api/file-agent',
-                json=request_data,
-                headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
+#         # Try the request with retries and exponential backoff
+#         success = False
+#         for retry in range(max_retries):
+#             try:
+#                 response = requests.post(
+#                     'http://localhost:8001/api/file-agent',
+#                     params={
+#                         'query': 'summarize',
+#                         'session_id': 'test_session_123',
+#                         'user_id': 'test_user_123',
+#                         'request_id': 'test_request_123',
+#                         'use_cache': 'true'
+#                     },
+#                     json=files_data,
+#                     headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
+#                 )
+                
+#                 print(f"\nStatus Code: {response.status_code}")
+                
+#                 if response.status_code == 200:
+#                     success = True
+#                     break
+#                 else:
+#                     print(f"Attempt {retry + 1} failed. Status: {response.status_code}")
+#                     if retry < max_retries - 1:
+#                         delay = min(30, (2 ** retry) * 5)
+#                         print(f"Waiting {delay} seconds before retry...")
+#                         time.sleep(delay)
+#             except Exception as e:
+#                 print(f"Request failed: {str(e)}")
+#                 if retry < max_retries - 1:
+#                     delay = min(30, (2 ** retry) * 5)
+#                     print(f"Waiting {delay} seconds before retry...")
+#                     time.sleep(delay)
+#     # ... rest of the function ...
+
+async def test_file_agent():
+    """Test the /api/file-agent endpoint with various file types."""
+    print("\nStarting file processing test...\n")
+    
+    # Process each file type
+    test_files = os.listdir('test_files')
+    for file in test_files:
+        if file.startswith('.'):
+            print(f"Skipping hidden file: {file}")
+            continue
+            
+        print(f"\nProcessing {file}...")
+        
+        # Read file content
+        file_path = os.path.join('test_files', file)
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+            
+        # Convert to base64
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Create request data
+        request_data = {
+            "query": "Please process this file and provide insights",
+            "user_id": "test_user",
+            "request_id": "test_request",
+            "session_id": "test_session",
+            "files": [{
+                "name": file,
+                "base64": encoded_content,
+                "type": os.path.splitext(file)[1][1:]  # Get file extension without dot
+            }]
+        }
+        
+        # First get markdown conversion
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/file-agent",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('API_BEARER_TOKEN')}",
+                    "Content-Type": "application/json"
+                },
+                json=request_data
             )
             
-            print(f"\nStatus Code: {response.status_code}")
+        if response.status_code == 200:
+            print(f"✓ Successfully processed {file}")
+            result = response.json()
+            markdown_content = result.get("markdown", "")
             
-            if response.status_code == 200:
-                result = response.json()
-                if result['success']:
-                    # Save markdown to file
-                    output_file = os.path.join('markdown_results', 'file_agent_summary.md')
+            # Save markdown content with original filename
+            base_name = os.path.splitext(file)[0]
+            output_path = 'markdown_results/api_openrouter_connection_test.md'
+            with open(output_path, 'w') as f:
+                f.write(f"# OpenRouter API Connection Test\n\n")
+                f.write(f"Model: {model}\n")
+                f.write(f"Response: {response.choices[0].message.content}")
+            markdown_content = result.get("markdown", "")
+            
+            # Save markdown content with original filename
+            base_name = os.path.splitext(file)[0]
+            output_file = os.path.join('markdown_results', f"{base_name}.md")
+            with open(output_file, 'w') as f:
+                f.write(markdown_content)
                     
-                    with open(output_file, 'w') as f:
-                        f.write(result['markdown'])
-                    print(f"✓ Successfully saved summary to: {output_file}")
-                    
-                    # Show preview
-                    preview = result['markdown'][:200] + '...' if len(result['markdown']) > 200 else result['markdown']
-                    print(f"\nPreview of summary:\n{preview}")
+            print(f"  Output length: {len(markdown_content)} characters")
+            print(f"  First 100 characters: {markdown_content[:100]}...")
+            print(f"  Saved to: {output_file}")
+        else:
+            print(f"✗ Failed to process {file}")
+            print(f"  Status: {response.status_code}")
+            try:
+                error_json = response.json()
+                if isinstance(error_json, dict):
+                    print(f"  Error details: {json.dumps(error_json, indent=2)}")
+                    if 'detail' in error_json:
+                        print(f"  Validation error: {error_json['detail']}")
                 else:
-                    print(f"✗ Processing failed: {result.get('error', 'Unknown error')}")
-                    print(f"Full response: {json.dumps(result, indent=2)}")
-            else:
-                print("✗ Request failed")
-                print(f"Response: {response.text}")
-                
-        except Exception as e:
-            print(f"✗ Error making request: {str(e)}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print("No files to process")
+                    print(f"  Error response: {error_json}")
+            except json.JSONDecodeError:
+                print(f"  Raw response: {response.text}")
+            except Exception as e:
+                print(f"  Error parsing response: {str(e)}")
+                print(f"  Raw response: {response.text}")
+            
+async def test_convert_to_markdown():
+    """Test the /api/convert-to-markdown endpoint with all test files."""
+    print("\nTesting /api/convert-to-markdown endpoint...")
     
-    print("\nTest completed.")
+    test_files = [f for f in os.listdir('test_files') if not f.startswith('.')]
+    for file in test_files:
+        print(f"\nConverting {file}...")
+        
+        # Read and encode file
+        file_path = os.path.join('test_files', file)
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Test conversion
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/convert-to-markdown",
+                headers=HEADERS,
+                json={
+                    "file": {
+                        "name": file,
+                        "base64": encoded_content
+                    }
+                }
+            )
+        
+        if response.status_code == 200:
+            print(f"✓ Successfully converted {file}")
+            result = response.json()
+            markdown_content = result.get("markdown", "")
+            
+            print(f"  Output length: {len(markdown_content)} characters")
+            if markdown_content:
+                print(f"  First 100 characters: {markdown_content[:100]}...")
+                
+                # Save for verification
+                clean_name = re.sub(r'[^\w\-_\.]', '_', file)
+                base_name = os.path.splitext(clean_name)[0]
+                markdown_path = os.path.join('markdown_results', f"{base_name}.md")
+                os.makedirs('markdown_results', exist_ok=True)
+                with open(markdown_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                print(f"  Saved to: {markdown_path}")
+        else:
+            print(f"✗ Failed to convert {file}")
+            print(f"  Error: {response.text}")
 
-def test_file_agent_cached():
-    """Test the /api/file-agent-cached endpoint with caching enabled and disabled."""
+async def test_file_agent_api():
+    """Test the /api/file-agent endpoint with all test files."""
+    print("\nTesting /api/file-agent endpoint...")
+    
+    test_files = [f for f in os.listdir('test_files') if not f.startswith('.')]
+    for file in test_files:
+        print(f"\nProcessing {file} with file-agent...")
+        
+        # Read and encode file
+        file_path = os.path.join('test_files', file)
+        with open(file_path, 'rb') as f:
+            file_content = f.read()
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+        
+        # Test without query first
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{API_URL}/api/file-agent",
+                headers=HEADERS,
+                json={
+                    "files": [{
+                        "name": file,
+                        "base64": encoded_content
+                    }]
+                }
+            )
+        
+        if response.status_code == 200:
+            print(f"✓ Successfully processed {file}")
+            result = response.json()
+            markdown_content = result.get("markdown", "")
+            
+            print(f"  Output length: {len(markdown_content)} characters")
+            if markdown_content:
+                print(f"  First 100 characters: {markdown_content[:100]}...")
+                
+                # Save markdown result
+                clean_name = re.sub(r'[^\w\-_\.]', '_', file)
+                base_name = os.path.splitext(clean_name)[0]
+                markdown_path = os.path.join('markdown_results', f"{base_name}.md")
+                os.makedirs('markdown_results', exist_ok=True)
+                with open(markdown_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                print(f"  Saved to: {markdown_path}")
+                
+                # Now test with a query
+                query = "Please provide a concise summary of the following content"
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{API_URL}/api/file-agent",
+                        headers=HEADERS,
+                        params={"query": query},
+                        json={
+                            "files": [{
+                                "name": f"{base_name}.md",
+                                "base64": base64.b64encode(markdown_content.encode()).decode()
+                            }]
+                        }
+                    )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    summary = result.get("markdown", "")
+                    
+                    # Save summary result
+                    summary_path = os.path.join('markdown_results', f"{base_name}_summary.md")
+                    with open(summary_path, 'w', encoding='utf-8') as f:
+                        f.write(summary)
+                    print(f"  Summary saved to: {summary_path}")
+                else:
+                    print(f"✗ Failed to get summary for {file}")
+                    print(f"  Error: {response.text}")
+        else:
+            print(f"✗ Failed to process {file}")
+            print(f"  Error: {response.text}")
+
+async def test_file_agent_cached_api():
+    """Test the /api/file-agent-cached endpoint."""
     print("\nTesting /api/file-agent-cached endpoint...")
     
-    # Test files to process
-    test_files = [
-        ('test.docx', 'docx'),
-        ('test_wikipedia.html', 'html'),
-        ('test_serp.html', 'html'),
-        ('test.pptx', 'pptx'),
-        ('test.pdf', 'pdf'),
-        ('test.xlsx', 'xlsx'),
-        ('test_blog.html', 'html'),
-        ('image.jpg', 'jpg')
-    ]
+    # Use a test file for cache testing
+    test_file = next(f for f in os.listdir('test_files') if f.endswith('.docx'))
+    print(f"Using {test_file} for cache testing...")
     
-    # Generate a unique session ID for this test
-    session_id = f"test_session_{int(time.time())}"
-    user_id = "test_user"
-    request_id = f"test_request_{int(time.time())}"
+    # Read and encode file
+    file_path = os.path.join('test_files', test_file)
+    with open(file_path, 'rb') as f:
+        file_content = f.read()
+    encoded_content = base64.b64encode(file_content).decode('utf-8')
     
-    # Test with caching enabled (default)
-    print("\nTest 1: With caching enabled...")
-    files_data = []
-    for file_name, file_type in test_files:
-        try:
-            # Read and encode file
-            file_path = os.path.join('test_files', file_name)
-            with open(file_path, 'rb') as f:
-                content = f.read()
-                base64_content = base64.b64encode(content).decode('utf-8')
-                
-                file_data = {
-                    'name': file_name,
-                    'type': file_type,
-                    'base64': base64_content
-                }
-                
-                # Add model for images
-                if file_type.lower() in ['jpg', 'jpeg', 'png', 'gif']:
-                    file_data['model'] = os.getenv("OPENROUTER_VLM_MODEL")
-                
-                files_data.append(file_data)
-                print(f"✓ Successfully encoded {file_name}")
-                
-        except Exception as e:
-            print(f"✗ Error encoding {file_name}: {str(e)}")
+    files = [{
+        "name": test_file,
+        "base64": encoded_content
+    }]
     
-    # First request (should cache the results)
-    try:
-        response = requests.post(
-            'http://localhost:8001/api/file-agent-cached',
-            json={
-                'query': 'What are the main topics discussed in these documents?',
-                'files': files_data,
-                'session_id': session_id,
-                'user_id': user_id,
-                'request_id': request_id,
-                'use_cache': True
+    # Test 1: First request (should cache)
+    print("\nTest 1: First request (should cache)...")
+    async with httpx.AsyncClient() as client:
+        start_time = time.time()
+        response = await client.post(
+            f"{API_URL}/api/file-agent-cached",
+            headers=HEADERS,
+            params={
+                "query": "What are the main topics?",
+                "session_id": "test_session_123",
+                "user_id": "test_user_123",
+                "request_id": "test_request_123",
+                "use_cache": True
             },
-            headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
+            json={"files": files}
         )
+    
+    if response.status_code == 200:
+        print(f"✓ First request successful")
+        print(f"  Time taken: {time.time() - start_time:.2f}s")
         
-        print(f"\nFirst request (with caching):")
-        print(f"Status Code: {response.status_code}")
-        if response.status_code == 200:
-            result = response.json()
-            print(f"✓ Success: {result['success']}")
-            print(f"Response length: {len(result['markdown'])} characters")
-            print(f"First 100 characters: {result['markdown'][:100]}...")
-        else:
-            print(f"✗ Error: {response.text}")
-            
-        # Second request with same files (should use cache)
+        # Test 2: Second request (should use cache)
         print("\nTest 2: Second request (should use cache)...")
-        start_time = time.time()
-        response = requests.post(
-            'http://localhost:8001/api/file-agent-cached',
-            json={
-                'query': 'Give me a different perspective on these documents.',
-                'files': files_data,
-                'session_id': session_id,
-                'user_id': user_id,
-                'request_id': request_id,
-                'use_cache': True
-            },
-            headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
-        )
-        cached_time = time.time() - start_time
+        async with httpx.AsyncClient() as client:
+            start_time = time.time()
+            response = await client.post(
+                f"{API_URL}/api/file-agent-cached",
+                headers=HEADERS,
+                params={
+                    "query": "Give me a different perspective",
+                    "session_id": "test_session_123",
+                    "user_id": "test_user_123",
+                    "request_id": "test_request_456",
+                    "use_cache": True
+                },
+                json={"files": files}
+            )
         
-        print(f"Status Code: {response.status_code}")
         if response.status_code == 200:
-            result = response.json()
-            print(f"✓ Success: {result['success']}")
-            print(f"Response time: {cached_time:.2f} seconds")
-            print(f"Response length: {len(result['markdown'])} characters")
-            print(f"First 100 characters: {result['markdown'][:100]}...")
+            print(f"✓ Second request successful")
+            print(f"  Time taken: {time.time() - start_time:.2f}s")
         else:
-            print(f"✗ Error: {response.text}")
-        
-        # Test with caching disabled
-        print("\nTest 3: With caching disabled...")
-        start_time = time.time()
-        response = requests.post(
-            'http://localhost:8001/api/file-agent-cached',
-            json={
-                'query': 'Summarize these documents.',
-                'files': files_data,
-                'session_id': session_id,
-                'user_id': user_id,
-                'request_id': request_id,
-                'use_cache': False
-            },
-            headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
-        )
-        uncached_time = time.time() - start_time
-        
-        print(f"Status Code: {response.status_code}")
-        if response.status_code == 200:
-            result = response.json()
-            print(f"✓ Success: {result['success']}")
-            print(f"Response time: {uncached_time:.2f} seconds")
-            print(f"Response length: {len(result['markdown'])} characters")
-            print(f"First 100 characters: {result['markdown'][:100]}...")
-        else:
-            print(f"✗ Error: {response.text}")
-        
-        # Test error cases
-        print("\nTest 4: Error cases...")
-        
-        # Test invalid token
-        response = requests.post(
-            'http://localhost:8001/api/file-agent-cached',
-            json={
-                'query': 'This should fail.',
-                'files': files_data,
-                'session_id': session_id,
-                'user_id': user_id,
-                'request_id': request_id
-            },
-            headers={'Authorization': 'Bearer invalid_token'}
-        )
-        print(f"\nInvalid token test:")
-        print(f"Status Code: {response.status_code}")
-        if response.status_code == 401:
-            print("✓ Successfully rejected invalid token")
-        else:
-            print(f"✗ Unexpected response: {response.text}")
-        
-        # Test missing files
-        response = requests.post(
-            'http://localhost:8001/api/file-agent-cached',
-            json={
-                'query': 'This should fail.',
-                'session_id': session_id,
-                'user_id': user_id,
-                'request_id': request_id
-            },
-            headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
-        )
-        print(f"\nMissing files test:")
-        print(f"Status Code: {response.status_code}")
-        if response.status_code == 422:
-            print("✓ Successfully handled missing files with 422 error")
-        else:
-            print(f"✗ Expected status code 422 but got {response.status_code}")
-            
-    except Exception as e:
-        print(f"✗ Error during test: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
+            print(f"✗ Second request failed")
+            print(f"  Error: {response.text}")
+    else:
+        print(f"✗ First request failed")
+        print(f"  Error: {response.text}")
 
-if __name__ == "__main__":
+async def main():
+    """Run all tests in sequence."""
     print("\nStarting tests...")
     
-    # Load environment variables
-    load_dotenv(find_dotenv())
-    print(f"\nLoading .env file from: {find_dotenv()}")
-    
-    print("\nEnvironment variables loaded:")
-    print(f"OPENROUTER_API_KEY = {os.getenv('OPENROUTER_API_KEY')}")
-    print(f"OPENROUTER_MODEL = {os.getenv('OPENROUTER_MODEL')}\n")
-    
-    # Run tests
+    # Run OpenRouter tests
     test_openrouter_api()
     test_file_processing()
     test_file_processing_with_llm()
     test_image_processing_with_llm()
-    test_api_file_agent_cached()
-    test_convert_to_markdown()
-    test_file_agent()
-    test_file_agent_cached()
+    test_file_agent_openrouter()
     
-    print("\nCleaning up...")
-    print("Done!")
+    print("\nAll tests completed!")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

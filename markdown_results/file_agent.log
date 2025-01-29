@@ -1,0 +1,27 @@
+2025-01-29 13:56:49,935 - __main__ - INFO - Processing file: test.docx
+2025-01-29 13:56:49,937 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.docx
+2025-01-29 13:56:49,981 - __main__ - INFO - Successfully converted file. Output length: 4555
+2025-01-29 13:56:49,982 - __main__ - INFO - Cleaned up temporary file
+2025-01-29 13:56:49,992 - __main__ - INFO - Processing file: test.pptx
+2025-01-29 13:56:49,993 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.pptx
+2025-01-29 13:56:50,041 - __main__ - INFO - Successfully converted file. Output length: 1565
+2025-01-29 13:56:50,041 - __main__ - INFO - Cleaned up temporary file
+2025-01-29 13:56:50,052 - __main__ - INFO - Processing file: test.jpg
+2025-01-29 13:56:50,052 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.jpg
+2025-01-29 13:56:50,052 - __main__ - INFO - Detected image type: webp, using vision model: meta-llama/llama-3.2-11b-vision-instruct:free
+2025-01-29 13:56:50,395 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2025-01-29 13:56:52,161 - __main__ - INFO - Successfully used vision model
+2025-01-29 13:56:52,161 - __main__ - INFO - Successfully converted file. Output length: 776
+2025-01-29 13:56:52,161 - __main__ - INFO - Cleaned up temporary file
+2025-01-29 13:56:52,178 - __main__ - INFO - Processing file: test.pdf
+2025-01-29 13:56:52,178 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.pdf
+2025-01-29 13:56:52,253 - __main__ - INFO - Successfully converted file. Output length: 28
+2025-01-29 13:56:52,253 - __main__ - INFO - Cleaned up temporary file
+2025-01-29 13:56:52,267 - __main__ - INFO - Processing file: test.html
+2025-01-29 13:56:52,267 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.html
+2025-01-29 13:56:52,295 - __main__ - INFO - Successfully converted file. Output length: 10720
+2025-01-29 13:56:52,296 - __main__ - INFO - Cleaned up temporary file
+2025-01-29 13:56:52,307 - __main__ - INFO - Processing file: test.xlsx
+2025-01-29 13:56:52,307 - __main__ - INFO - Saved content to temporary file: /tmp/temp_file_test.xlsx
+2025-01-29 13:56:52,377 - __main__ - INFO - Successfully converted file. Output length: 808
+2025-01-29 13:56:52,377 - __main__ - INFO - Cleaned up temporary file

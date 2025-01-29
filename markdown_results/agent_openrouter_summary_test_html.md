@@ -1,8 +1,10 @@
-1. test_blog.html:
+# Original Content
 
 
+[Skip to main content](#__docusaurus_skipToContent_fallback)What's new in AutoGen? Read [this blog](/autogen/blog/2024/03/03/AutoGen-Update) for an overview of updates[![AutoGen](/autogen/img/ag.svg)![AutoGen](/autogen/img/ag.svg)**AutoGen**](/autogen/)[Docs](/autogen/docs/Getting-Started)[API](/autogen/docs/reference/agentchat/conversable_agent)[Blog](/autogen/blog)[FAQ](/autogen/docs/FAQ)[Examples](/autogen/docs/Examples)[Notebooks](/autogen/docs/notebooks)[Gallery](/autogen/docs/Gallery)Other Languages
 
 * [Dotnet](https://microsoft.github.io/autogen-for-net/)
+[GitHub](https://github.com/microsoft/autogen)`ctrl``K`Recent posts
 
 * [What's New in AutoGen?](/autogen/blog/2024/03/03/AutoGen-Update)
 * [StateFlow - Build LLM Workflows with Customized State-Oriented Transition Function in GroupChat](/autogen/blog/2024/02/29/StateFlow)
@@ -27,7 +29,9 @@
 * [Does Model and Inference Parameter Matter in LLM Applications? - A Case Study for MATH](/autogen/blog/2023/04/21/LLM-tuning-math)
 # Does Model and Inference Parameter Matter in LLM Applications? - A Case Study for MATH
 
+April 21, 2023 · 6 min read[![Chi Wang](https://github.com/sonichi.png)](https://www.linkedin.com/in/chi-wang-49b15b16/)[Chi Wang](https://www.linkedin.com/in/chi-wang-49b15b16/)Principal Researcher at Microsoft Research
 
+![level 2 algebra](/autogen/assets/images/level2algebra-659ba95286432d9945fc89e84d606797.png)
 
 **TL;DR:**
 
@@ -67,13 +71,16 @@ The first figure in this blog post shows the average accuracy and average infere
 Surprisingly, the tuned gpt-3.5-turbo model is selected as a better model and it vastly outperforms untuned gpt-4 in accuracy (92% vs. 70%) with equal or 2.5 times higher inference budget.
 The same observation can be obtained on the level 3 Algebra test set.
 
+![level 3 algebra](/autogen/assets/images/level3algebra-94e87a683ac8832ac7ae6f41f30131a4.png)
 
 However, the selected model changes on level 4 Algebra.
 
+![level 4 algebra](/autogen/assets/images/level4algebra-492beb22490df30d6cc258f061912dcd.png)
 
 This time gpt-4 is selected as the best model. The tuned gpt-4 achieves much higher accuracy (56% vs. 44%) and lower cost than the untuned gpt-4.
 On level 5 the result is similar.
 
+![level 5 algebra](/autogen/assets/images/level5algebra-8fba701551334296d08580b4b489fe56.png)
 
 We can see that AutoGen has found different optimal model and inference parameters for each subset of a particular level, which shows that these parameters matter in cost-sensitive LLM applications and need to be carefully tuned or adapted.
 
@@ -99,6 +106,7 @@ The need for model selection, parameter tuning and cost saving is not specific t
 * [LLM](/autogen/blog/tags/llm)
 * [GPT](/autogen/blog/tags/gpt)
 * [research](/autogen/blog/tags/research)
+[Newer PostAchieve More, Pay Less - Use GPT-4 Smartly](/autogen/blog/2023/05/18/GPT-adaptive-humaneval)
 
 * [Experiment Setup](#experiment-setup)
 * [Experiment Results](#experiment-results)
@@ -111,3 +119,6 @@ Community
 Copyright © 2024 AutoGen Authors | [Privacy and Cookies](https://go.microsoft.com/fwlink/?LinkId=521839)
 
 
+# Summary
+
+The blog post discusses a study using AutoGen, a tool that helps with model selection, parameter tuning, and cost-saving in large language model (LLM) applications. The study explores the impact of model and inference parameters on the performance of LLMs, using a case study for a math problem-solving benchmark called MATH. The results show that by tuning inference parameters like model, number of responses, temperature, and top_p, the baseline accuracy of untuned gpt-4 can be improved by 20% in high school math competition problems. The tuned gpt-3.5-turbo model outperformed untuned gpt-4 for easy problems, while tuned gpt-4 was more accurate and less expensive for hard problems. The study suggests that AutoGen can help with cost-saving in LLM applications.
