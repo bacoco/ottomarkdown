@@ -103,6 +103,11 @@ def test_file_processing():
     
     # Process each file in the test directory
     for file_path in test_dir.glob("*"):
+        # Skip .DS_Store and other hidden files
+        if file_path.name.startswith('.'):
+            print(f"Skipping hidden file: {file_path.name}")
+            continue
+            
         try:
             print(f"\nProcessing {file_path.name}...")
             
@@ -126,6 +131,7 @@ def test_file_processing():
                         print(f"  Title: {result.title}")
                         f.write(f"# {result.title}\n\n")
                     f.write(result.text_content)
+                
                 print(f"  Saved markdown to: {md_file}")
             else:
                 print(f"✗ Failed to process {file_path.name}")
@@ -387,19 +393,24 @@ def test_convert_to_markdown():
     binary_size_limit = 5000000  # 5MB limit for binary files
     
     for file_name in test_files:
-        print(f"\nProcessing {file_name}...")
-        file_path = os.path.join('test_files', file_name)
-        
-        # Determine file type
-        file_ext = os.path.splitext(file_name)[1][1:].lower()
-        is_binary = file_ext in ['pptx', 'xlsx', 'docx', 'pdf']
-        size_limit = binary_size_limit if is_binary else content_size_limit
-        
-        # Check file size
-        if os.path.getsize(file_path) > size_limit:
-            print(f"⚠️ File exceeds size limit ({os.path.getsize(file_path)} bytes). Content will be truncated.")
-        
         try:
+            # Skip system files
+            if file_name.startswith('.'):
+                print(f"Skipping system file: {file_name}")
+                continue
+                
+            print(f"\nProcessing {file_name}...")
+            file_path = os.path.join('test_files', file_name)
+            
+            # Determine file type
+            file_ext = os.path.splitext(file_name)[1][1:].lower()
+            is_binary = file_ext in ['pptx', 'xlsx', 'docx', 'pdf']
+            size_limit = binary_size_limit if is_binary else content_size_limit
+            
+            # Check file size
+            if os.path.getsize(file_path) > size_limit:
+                print(f"⚠️ File exceeds size limit ({os.path.getsize(file_path)} bytes). Content will be truncated.")
+            
             # Read and encode file
             with open(file_path, 'rb') as f:
                 content = f.read(size_limit)
@@ -470,10 +481,108 @@ def test_convert_to_markdown():
                     
         except Exception as e:
             print(f"✗ Failed to process {file_name}: {str(e)}")
+            continue
         
         # Add delay between files
         if file_name != test_files[-1]:  # Don't wait after the last file
             time.sleep(5)  # 5 second delay between files
+
+def test_file_agent():
+    """Test the /api/file-agent endpoint with query context."""
+    print("\nTesting /api/file-agent endpoint with query...")
+    
+    # Test each file individually
+    test_files = os.listdir('test_files')
+    content_size_limit = 500000  # 500KB limit for text files
+    binary_size_limit = 5000000  # 5MB limit for binary files
+    
+    # Test query to provide context
+    test_query = "Please provide a summary of these files focusing on the main points and key information."
+    print(f"\nUsing query: {test_query}")
+    
+    files_data = []
+    for file_name in test_files:
+        # Skip system files
+        if file_name.startswith('.'):
+            print(f"Skipping system file: {file_name}")
+            continue
+            
+        print(f"\nProcessing {file_name}...")
+        file_path = os.path.join('test_files', file_name)
+        
+        # Determine file type
+        file_ext = os.path.splitext(file_name)[1][1:].lower()
+        is_binary = file_ext in ['pptx', 'xlsx', 'docx', 'pdf']
+        size_limit = binary_size_limit if is_binary else content_size_limit
+        
+        try:
+            # Read and encode file
+            with open(file_path, 'rb') as f:
+                content = f.read(size_limit)
+                base64_content = base64.b64encode(content).decode('utf-8')
+                print(f"✓ Successfully encoded {file_name}")
+                
+                # Add file to list
+                files_data.append({
+                    'name': file_name,
+                    'type': file_ext,
+                    'base64': base64_content
+                })
+                
+        except Exception as e:
+            print(f"✗ Failed to process {file_name}: {str(e)}")
+            continue
+    
+    if files_data:
+        try:
+            print(f"\nSending request with {len(files_data)} files...")
+            
+            # Prepare request data
+            request_data = {
+                'query': test_query,
+                'files': files_data,
+                'session_id': 'test_session_123',
+                'user_id': 'test_user_123',
+                'request_id': 'test_request_123'
+            }
+            
+            # Send request
+            response = requests.post(
+                'http://localhost:8001/api/file-agent',
+                json=request_data,
+                headers={'Authorization': f'Bearer {os.getenv("API_BEARER_TOKEN")}'}
+            )
+            
+            print(f"\nStatus Code: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result['success']:
+                    # Save markdown to file
+                    output_file = os.path.join('markdown_results', 'file_agent_summary.md')
+                    
+                    with open(output_file, 'w') as f:
+                        f.write(result['markdown'])
+                    print(f"✓ Successfully saved summary to: {output_file}")
+                    
+                    # Show preview
+                    preview = result['markdown'][:200] + '...' if len(result['markdown']) > 200 else result['markdown']
+                    print(f"\nPreview of summary:\n{preview}")
+                else:
+                    print(f"✗ Processing failed: {result.get('error', 'Unknown error')}")
+                    print(f"Full response: {json.dumps(result, indent=2)}")
+            else:
+                print("✗ Request failed")
+                print(f"Response: {response.text}")
+                
+        except Exception as e:
+            print(f"✗ Error making request: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("No files to process")
+    
+    print("\nTest completed.")
 
 def test_file_agent_cached():
     """Test the /api/file-agent-cached endpoint with caching enabled and disabled."""
@@ -647,12 +756,25 @@ def test_file_agent_cached():
         print(f"Error type: {type(e).__name__}")
 
 if __name__ == "__main__":
+    print("\nStarting tests...")
+    
+    # Load environment variables
+    load_dotenv(find_dotenv())
+    print(f"\nLoading .env file from: {find_dotenv()}")
+    
+    print("\nEnvironment variables loaded:")
+    print(f"OPENROUTER_API_KEY = {os.getenv('OPENROUTER_API_KEY')}")
+    print(f"OPENROUTER_MODEL = {os.getenv('OPENROUTER_MODEL')}\n")
+    
+    # Run tests
     test_openrouter_api()
     test_file_processing()
     test_file_processing_with_llm()
     test_image_processing_with_llm()
     test_api_file_agent_cached()
     test_convert_to_markdown()
+    test_file_agent()
     test_file_agent_cached()
+    
     print("\nCleaning up...")
     print("Done!")

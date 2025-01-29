@@ -14,6 +14,8 @@ from markitdown import MarkItDown
 import hashlib
 from datetime import datetime
 import logging
+import imghdr
+import io
 
 # Configure logging
 logging.basicConfig(
@@ -151,7 +153,7 @@ async def store_message(session_id: str, message_type: str, content: str, data: 
         # Don't raise the exception, just log it
         # This prevents message storage failures from breaking the main functionality
 
-async def process_files_to_string(files: Optional[List[Dict[str, Any]]]) -> str:
+async def process_files_to_string(files: Optional[List[Dict[str, Any]]], query: str = "") -> str:
     """Convert a list of files with base64 content into a formatted string using MarkItDown."""
     if not files:
         return ""
@@ -160,14 +162,50 @@ async def process_files_to_string(files: Optional[List[Dict[str, Any]]]) -> str:
     
     for i, file in enumerate(files, 1):
         try:
+            # Skip system files
+            if file['name'].startswith('.'):
+                print(f"Skipping system file: {file['name']}")
+                continue
+                
             # Save base64 content to a temporary file
             decoded_content = base64.b64decode(file['base64'])
-            temp_file_path = f"/tmp/temp_file_{i}"
+            
+            # Detect if the content is an image using imghdr
+            content_stream = io.BytesIO(decoded_content)
+            image_type = imghdr.what(content_stream)
+            is_image = image_type is not None
+            
+            temp_file_path = f"/tmp/temp_file_{file['name']}"
             with open(temp_file_path, "wb") as f:
                 f.write(decoded_content)
             
-            # Convert file to markdown using MarkItDown
-            result = md.convert(temp_file_path)
+            # Create appropriate MarkItDown instance based on file type
+            if is_image:
+                vlm_model = os.getenv("OPENROUTER_VLM_MODEL")
+                if not vlm_model:
+                    raise ValueError("OPENROUTER_VLM_MODEL environment variable not set")
+                    
+                logger.info(f"Detected image type: {image_type}, using vision model: {vlm_model}")
+                temp_md = MarkItDown(
+                    llm_client=openai_client,
+                    llm_model=vlm_model
+                )
+            else:
+                model = os.getenv("OPENROUTER_MODEL")
+                if not model:
+                    raise ValueError("OPENROUTER_MODEL environment variable not set")
+                    
+                temp_md = MarkItDown(
+                    llm_client=openai_client,
+                    llm_model=model
+                )
+            
+            # Convert file to markdown using MarkItDown with query context if provided
+            if query:
+                result = temp_md.convert(temp_file_path, use_llm=True, prompt_prefix=f"Context: {query}\n\n")
+            else:
+                result = temp_md.convert(temp_file_path, use_llm=True)
+                
             markdown_content = result.text_content
             
             # Clean up temporary file
@@ -175,7 +213,7 @@ async def process_files_to_string(files: Optional[List[Dict[str, Any]]]) -> str:
             
             file_content += f"{i}. {file['name']}:\n\n{markdown_content}\n\n"
         except Exception as e:
-            print(f"Error processing file {file['name']}: {str(e)}")
+            logger.error(f"Error processing file {file['name']}: {str(e)}")
             # Fallback to direct text conversion if markdown conversion fails
             try:
                 text_content = decoded_content.decode('utf-8')
@@ -294,10 +332,15 @@ async def file_agent(
             data=message_data
         )
 
-        # Get markdown content from files
+        # Get markdown content from files using query as context
         markdown_content = ""
         if request.files:
-            markdown_content = await process_files_to_string(request.files)
+            try:
+                markdown_content = await process_files_to_string(request.files, query=request.query)
+                logger.info(f"Successfully processed {len(request.files)} files with query: {request.query}")
+            except Exception as e:
+                logger.error(f"Error processing files: {str(e)}")
+                raise e
 
         # Store agent's response
         await store_message(
@@ -310,7 +353,8 @@ async def file_agent(
         return AgentResponse(success=True, markdown=markdown_content)
 
     except Exception as e:
-        print(f"Error processing request: {str(e)}")
+        error_msg = f"Error processing request: {str(e)}"
+        logger.error(error_msg)
         # Store error message in conversation
         await store_message(
             session_id=request.session_id,
@@ -318,7 +362,7 @@ async def file_agent(
             content="I apologize, but I encountered an error processing your request.",
             data={"error": str(e), "request_id": request.request_id}
         )
-        return AgentResponse(success=False, markdown="")
+        return AgentResponse(success=False, markdown="", error=str(e))
 
 @app.post("/api/convert-to-markdown", response_model=MarkdownResponse)
 async def convert_to_markdown(
@@ -331,16 +375,20 @@ async def convert_to_markdown(
         
         # Save base64 content to a temporary file
         decoded_content = base64.b64decode(request.file['base64'])
-        temp_file_path = f"/tmp/temp_file_{request.file['name']}"
         
+        # Detect if the content is an image using imghdr
+        content_stream = io.BytesIO(decoded_content)
+        image_type = imghdr.what(content_stream)
+        is_image = image_type is not None
+        
+        temp_file_path = f"/tmp/temp_file_{request.file['name']}"
         try:
             with open(temp_file_path, "wb") as f:
                 f.write(decoded_content)
             logger.info(f"Saved content to temporary file: {temp_file_path}")
             
-            # Create a new MarkItDown instance with appropriate model
-            if 'model' in request.file:
-                logger.info(f"Using vision model: {os.getenv('OPENROUTER_VLM_MODEL')}")
+            if is_image:
+                logger.info(f"Detected image type: {image_type}, using vision model: {os.getenv('OPENROUTER_VLM_MODEL')}")
                 try:
                     # Create a new MarkItDown instance with the vision model
                     temp_md = MarkItDown(

@@ -87,7 +87,7 @@ Response:
 ```bash
 POST /api/file-agent
 ```
-Processes files with an AI agent, providing enhanced responses and analysis.
+Processes files with an AI agent, providing enhanced responses and analysis. Supports both text documents and images.
 
 Request:
 ```json
@@ -99,8 +99,8 @@ Request:
         "base64": "base64_encoded_content"
     }],
     "session_id": "unique_session_id",
-    "user_id": "user_id",
-    "request_id": "request_id"
+    "user_id": "user_123",
+    "request_id": "request_456"
 }
 ```
 
@@ -108,29 +108,39 @@ Response:
 ```json
 {
     "success": true,
-    "markdown": "# Analysis\n\nAI-generated analysis and response..."
+    "markdown": "Analysis and summary in markdown format...",
+    "error": ""
 }
 ```
 
-### 3. AI Agent with Caching
+### 3. Cached File Agent
 ```bash
 POST /api/file-agent-cached
 ```
-Process files with AI agent, using cached markdown when available. This route stores converted markdown in Supabase for faster subsequent queries.
+Same as `/api/file-agent` but with document caching for improved performance.
 
-Request:
+### Image Processing
+
+The agent now supports image processing capabilities:
+- Automatic image type detection using `imghdr`
+- Integration with OpenRouter's Vision Language Models (VLM)
+- Image description and analysis in markdown format
+- Contextual understanding of images based on queries
+
+For image processing to work, make sure to set the `OPENROUTER_VLM_MODEL` environment variable to a compatible vision model (e.g., `meta-llama/llama-3.2-11b-vision-instruct`).
+
+Example image processing request:
 ```json
 {
-    "query": "Please analyze this document and summarize key points",
+    "query": "Describe this image",
     "files": [{
-        "name": "document.pdf",
-        "type": "application/pdf",
+        "name": "photo.jpg",
+        "type": "image/jpeg",
         "base64": "base64_encoded_content"
     }],
     "session_id": "unique_session_id",
-    "user_id": "user_id",
-    "request_id": "request_id",
-    "use_cache": true
+    "user_id": "user_123",
+    "request_id": "request_456"
 }
 ```
 
@@ -138,16 +148,18 @@ Request:
 |-------|------|-------------|
 | query | string | Instructions for the AI agent |
 | files | array | List of files to process |
-| session_id | string | Unique session identifier |
+| files[].name | string | Original filename with extension |
+| files[].type | string | MIME type of the file |
+| files[].base64 | string | Base64-encoded file content |
+| session_id | string | Unique session identifier for conversation context |
 | user_id | string | User identifier |
-| request_id | string | Request identifier |
-| use_cache | boolean | Whether to use cached markdown (optional, default: true) |
+| request_id | string | Unique request identifier |
 
 Response:
 ```json
 {
     "success": true,
-    "markdown": "AI-generated response based on cached or newly converted markdown"
+    "markdown": "Image description and analysis in markdown format..."
 }
 ```
 
@@ -226,7 +238,7 @@ POST /api/convert-to-markdown
 - Spreadsheets: `.xlsx`, `.csv`
 - Presentations: `.pptx`
 - Web: `.html`
-- Images: Not supported (will return error)
+- Images: `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`
 
 ### 2. AI Agent File Processing
 ```http
@@ -358,10 +370,10 @@ Create a `.env` file with the following variables:
 ```bash
 OPENROUTER_API_KEY=your_openrouter_api_key
 OPENROUTER_MODEL=your_default_model
-OPENROUTER_VLM_MODEL=your_vision_model
+OPENROUTER_VLM_MODEL=your_vision_model  # Required for image processing
 API_BEARER_TOKEN=your_api_token
 SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_KEY=your_supabase_key
 ```
 
 ## Docker Setup
